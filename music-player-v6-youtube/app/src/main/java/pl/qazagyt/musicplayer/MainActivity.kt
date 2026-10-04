@@ -211,8 +211,18 @@ class MainActivity: AppCompatActivity() {
     if (streamUrl.isNullOrBlank()) {
      val fallbacks=listOf(
       "https://pipedapi.kavin.rocks",
+      "https://pipedapi.leptons.xyz",
+      "https://pipedapi.nosebs.ru",
       "https://pipedapi.adminforge.de",
       "https://piped-api.privacy.com.de",
+      "https://pipedapi.drgns.space",
+      "https://pipedapi.owo.si",
+      "https://pipedapi.ducks.party",
+      "https://piped-api.codespace.cz",
+      "https://pipedapi.reallyaweso.me",
+      "https://api.piped.private.coffee",
+      "https://pipedapi.darkness.services",
+      "https://pipedapi.orangenet.cc",
       "https://api.piped.yt"
      )
      var lastFallbackError:Exception?=null
@@ -249,7 +259,7 @@ class MainActivity: AppCompatActivity() {
        }
       }catch(e:Exception){lastFallbackError=e}
      }
-     if(streamUrl.isNullOrBlank()) throw IllegalStateException("Brak bezpośredniego URL audio; fallback: "+(lastFallbackError?.message?:"brak odpowiedzi"))
+     if(streamUrl.isNullOrBlank()) throw IllegalStateException("Brak bezpośredniego URL audio; sprawdzone instancje: "+(lastFallbackError?.message?:"brak odpowiedzi"))
     }
     runOnUiThread{
      controller?.clearMediaItems()
