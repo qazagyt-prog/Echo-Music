@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.provider.MediaStore
 import android.view.Gravity
 import android.widget.*
@@ -36,11 +37,22 @@ class MainActivity: AppCompatActivity() {
  private val executor=Executors.newSingleThreadExecutor()
  private val permission=registerForActivityResult(ActivityResultContracts.RequestPermission()){ load() }
 
- override fun onCreate(b:Bundle?){super.onCreate(b);NewPipe.init(NewPipeDownloader());buildUi();connect();requestPermission()}
+ override fun onCreate(b:Bundle?){
+  super.onCreate(b)
+  NewPipe.init(NewPipeDownloader())
+  try {
+   val cls=Class.forName("org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper")
+   val version=cls.getDeclaredField("clientVersion").apply{isAccessible=true}
+   version.set(null,"2.20260120.01.00")
+   val extracted=cls.getDeclaredField("clientVersionExtracted").apply{isAccessible=true}
+   extracted.setBoolean(null,true)
+  } catch(e:Exception){ Log.w("MusicPlayerV11","Could not preset YouTube client version",e) }
+  buildUi();connect();requestPermission()
+}
 
  private fun buildUi(){
   val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(20,20,20,10);setBackgroundColor(Color.rgb(8,9,11))}
-  val title=TextView(this).apply{text="MUSIC PLAYER V9";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
+  val title=TextView(this).apply{text="MUSIC PLAYER V11";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
   search=EditText(this).apply{hint="Szukaj utworu, wykonawcy lub albumu…";setTextColor(Color.WHITE);setHintTextColor(Color.GRAY);setSingleLine(true)}
   now=TextView(this).apply{text="Brak utworu";textSize=17f;setTextColor(Color.WHITE);setPadding(0,18,0,8)}
   val controls=LinearLayout(this).apply{gravity=Gravity.CENTER}
@@ -127,7 +139,7 @@ class MainActivity: AppCompatActivity() {
 
  private fun showYouTube(){
   val input=EditText(this).apply{hint="Wklej link YouTube…";setSingleLine(true)}
-  AlertDialog.Builder(this).setTitle("YouTube — BEZ REKLAM").setMessage("Wklej link do filmu. V9 pobierze dostępny strumień audio i odtworzy go bez osadzonego odtwarzacza YouTube.").setView(input).setNegativeButton("ANULUJ",null).setPositiveButton("ODTWÓR"){_,_->playYouTube(input.text.toString())}.show()
+  AlertDialog.Builder(this).setTitle("YouTube — BEZ REKLAM").setMessage("Wklej link do filmu. V11 pobierze dostępny strumień audio i odtworzy go bez osadzonego odtwarzacza YouTube.").setView(input).setNegativeButton("ANULUJ",null).setPositiveButton("ODTWÓR"){_,_->playYouTube(input.text.toString())}.show()
  }
 
  private fun playYouTube(value:String){
@@ -141,6 +153,7 @@ class MainActivity: AppCompatActivity() {
     val streams=extractor.getAudioStreams()
     val audio=streams.maxByOrNull{b->if(b.getAverageBitrate()>0)b.getAverageBitrate() else b.getBitrate()}?:throw IllegalStateException("Brak dostępnego strumienia audio")
     val streamUrl=audio.getContent()
+    if (streamUrl.isNullOrBlank()) throw IllegalStateException("YouTube returned an empty audio URL")
     val title=extractor.getName()
     runOnUiThread{
      controller?.clearMediaItems()
@@ -148,7 +161,13 @@ class MainActivity: AppCompatActivity() {
      controller?.prepare();controller?.play();now.text="$title — YouTube"
      Toast.makeText(this,"▶ Odtwarzanie bez reklam",Toast.LENGTH_SHORT).show()
     }
-   }catch(e:Exception){runOnUiThread{Toast.makeText(this,"YouTube: "+(e.message?:"nie udało się pobrać audio"),Toast.LENGTH_LONG).show()}}
+   }catch(e:Exception){
+     Log.e("MusicPlayerV11","YouTube playback failed",e)
+     runOnUiThread{
+      val msg=e.message?.take(180)?:"nie udało się pobrać audio"
+      Toast.makeText(this,"YouTube: $msg",Toast.LENGTH_LONG).show()
+     }
+    }
   }
  }
 
