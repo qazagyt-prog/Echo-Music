@@ -40,7 +40,7 @@ class MainActivity: AppCompatActivity() {
 
  private fun buildUi(){
   val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(20,20,20,10);setBackgroundColor(Color.rgb(8,9,11))}
-  val title=TextView(this).apply{text="MUSIC PLAYER V7";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
+  val title=TextView(this).apply{text="MUSIC PLAYER V9";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
   search=EditText(this).apply{hint="Szukaj utworu, wykonawcy lub albumu…";setTextColor(Color.WHITE);setHintTextColor(Color.GRAY);setSingleLine(true)}
   now=TextView(this).apply{text="Brak utworu";textSize=17f;setTextColor(Color.WHITE);setPadding(0,18,0,8)}
   val controls=LinearLayout(this).apply{gravity=Gravity.CENTER}
@@ -127,7 +127,7 @@ class MainActivity: AppCompatActivity() {
 
  private fun showYouTube(){
   val input=EditText(this).apply{hint="Wklej link YouTube…";setSingleLine(true)}
-  AlertDialog.Builder(this).setTitle("YouTube — BEZ REKLAM").setMessage("Wklej link do filmu. V7 pobierze dostępny strumień audio i odtworzy go bez osadzonego odtwarzacza YouTube.").setView(input).setNegativeButton("ANULUJ",null).setPositiveButton("ODTWÓR"){_,_->playYouTube(input.text.toString())}.show()
+  AlertDialog.Builder(this).setTitle("YouTube — BEZ REKLAM").setMessage("Wklej link do filmu. V9 pobierze dostępny strumień audio i odtworzy go bez osadzonego odtwarzacza YouTube.").setView(input).setNegativeButton("ANULUJ",null).setPositiveButton("ODTWÓR"){_,_->playYouTube(input.text.toString())}.show()
  }
 
  private fun playYouTube(value:String){
