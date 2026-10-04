@@ -43,7 +43,7 @@ class MainActivity: AppCompatActivity() {
 
  private fun buildUi(){
   val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(20,20,20,10);setBackgroundColor(Color.rgb(8,9,11))}
-  val title=TextView(this).apply{text="MUSIC PLAYER V15";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
+  val title=TextView(this).apply{text="MUSIC PLAYER V16";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
   search=EditText(this).apply{hint="Szukaj utworu, wykonawcy lub albumu…";setTextColor(Color.WHITE);setHintTextColor(Color.GRAY);setSingleLine(true)}
   now=TextView(this).apply{text="Brak utworu";textSize=17f;setTextColor(Color.WHITE);setPadding(0,18,0,8)}
   val controls=LinearLayout(this).apply{gravity=Gravity.CENTER}
@@ -144,46 +144,56 @@ class MainActivity: AppCompatActivity() {
    Toast.makeText(this,"Nieprawidłowy link YouTube",Toast.LENGTH_LONG).show();return
   }
   val url="https://www.youtube.com/watch?v=$id"
-  Toast.makeText(this,"yt-dlp: pobieram strumień audio…",Toast.LENGTH_SHORT).show()
+  Toast.makeText(this,"V16: przygotowuję audio z YouTube…",Toast.LENGTH_SHORT).show()
   executor.execute{
    try{
-    val ydl=com.yausername.youtubedl_android.YoutubeDL.getInstance()
-    ydl.init(applicationContext)
-    try {
-     ydl.updateYoutubeDL(applicationContext, com.yausername.youtubedl_android.YoutubeDL.UpdateChannel.NIGHTLY)
-    } catch(updateError:Exception) {
-     Log.w("MusicPlayerV15","yt-dlp update skipped",updateError)
+    val ytdlp=dev.ffmpegkit_maintained.ytdlp.YtDlp
+    ytdlp.init(applicationContext)
+    val dir=java.io.File(cacheDir,"youtube")
+    dir.mkdirs()
+    dir.listFiles()?.forEach{it.delete()}
+    fun download(format:String, clients:String): java.io.File {
+     val request=dev.ffmpegkit_maintained.ytdlp.YtDlpRequest(url)
+      .setOutputTemplate(java.io.File(dir,"%(id)s_%(ext)s").absolutePath)
+      .addOption("--no-playlist")
+      .addOption("--no-part")
+      .addOption("--no-mtime")
+      .addOption("--restrict-filenames")
+      .addOption("--no-warnings")
+      .addOption("-f",format)
+      .addOption("--extractor-args","youtube:player_client=$clients")
+     val response=ytdlp.execute(request,null)
+     val files=dir.listFiles()?.filter{it.isFile && it.length()>1024}?.sortedByDescending{it.length()}?:emptyList()
+     if(response.exitCode!=0 || files.isEmpty()) throw IllegalStateException("yt-dlp nie pobrał audio (kod "+response.exitCode+")")
+     return files.first()
     }
-    val request=com.yausername.youtubedl_android.YoutubeDLRequest(url).apply{
-     addOption("-f","bestaudio/best")
-     addOption("--no-playlist")
-     addOption("--extractor-args","youtube:player_client=android")
-     addOption("--no-warnings")
+    val file=try{
+     download("bestaudio/best","web_embedded,android_vr")
+    }catch(first:Exception){
+     Log.w("MusicPlayerV16","Audio-only extraction failed; retrying with compatible A/V format",first)
+     dir.listFiles()?.forEach{it.delete()}
+     download("best[acodec!=none]/best","web_embedded,android_vr")
     }
-    val info=ydl.getInfo(request)
-    val streamUrl=info.url
-    if(streamUrl.isNullOrBlank()) throw IllegalStateException("yt-dlp nie zwrócił URL audio")
-    val title=info.title?.ifBlank{"YouTube"}?:"YouTube"
-    val author=info.uploader?.ifBlank{"YouTube"}?:"YouTube"
+    val title=file.nameWithoutExtension.replace('_',' ').ifBlank{"YouTube"}
     runOnUiThread{
      controller?.clearMediaItems()
      controller?.setMediaItem(
       MediaItem.Builder()
        .setMediaId("youtube:$id")
-       .setUri(streamUrl)
-       .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(author).build())
+       .setUri(android.net.Uri.fromFile(file))
+       .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist("YouTube").build())
        .build()
      )
      controller?.prepare()
      controller?.play()
-     now.text="$title — $author • YouTube"
-     Toast.makeText(this,"▶ Odtwarzanie audio",Toast.LENGTH_SHORT).show()
+     now.text="$title — YouTube"
+     Toast.makeText(this,"▶ YouTube — odtwarzanie",Toast.LENGTH_SHORT).show()
     }
    }catch(e:Exception){
-    Log.e("MusicPlayerV15","YouTube/yt-dlp failed",e)
+    Log.e("MusicPlayerV16","yt-dlp failed",e)
     runOnUiThread{
-     val msg=e.message?.replace("\n"," ")?.take(220) ?: "nie udało się pobrać audio"
-     Toast.makeText(this,"YouTube: $msg",Toast.LENGTH_LONG).show()
+     val msg=e.message?.replace("\n"," ")?.take(260)?:"nie udało się pobrać audio"
+     Toast.makeText(this,"YouTube V16: $msg",Toast.LENGTH_LONG).show()
     }
    }
   }
