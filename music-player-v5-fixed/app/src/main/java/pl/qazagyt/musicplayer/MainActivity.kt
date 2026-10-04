@@ -37,7 +37,7 @@ class MainActivity: AppCompatActivity() {
  private fun buildUi(){
   val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(20,20,20,10);setBackgroundColor(Color.rgb(8,9,11))}
   val title=TextView(this).apply{text="MUSIC PLAYER V5";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
-  search=EditText(this).apply{hint="Szukaj utworu, wykonawcy lub albumu…";setTextColor(Color.WHITE);setHintTextColor(Color.GRAY);singleLine=true}
+  search=EditText(this).apply{hint="Szukaj utworu, wykonawcy lub albumu…";setTextColor(Color.WHITE);setHintTextColor(Color.GRAY);setSingleLine(true)}
   now=TextView(this).apply{text="Brak utworu";textSize=17f;setTextColor(Color.WHITE);setPadding(0,18,0,8)}
   val controls=LinearLayout(this).apply{gravity=Gravity.CENTER}
   fun button(t:String,a:()->Unit)=Button(this).apply{text=t;setOnClickListener{a()}}
