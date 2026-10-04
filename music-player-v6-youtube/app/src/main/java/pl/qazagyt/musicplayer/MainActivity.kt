@@ -55,7 +55,7 @@ class MainActivity: AppCompatActivity() {
 
  private fun buildUi(){
   val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(20,20,20,10);setBackgroundColor(Color.rgb(8,9,11))}
-  val title=TextView(this).apply{text="MUSIC PLAYER V13";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
+  val title=TextView(this).apply{text="MUSIC PLAYER V14";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
   search=EditText(this).apply{hint="Szukaj utworu, wykonawcy lub albumu…";setTextColor(Color.WHITE);setHintTextColor(Color.GRAY);setSingleLine(true)}
   now=TextView(this).apply{text="Brak utworu";textSize=17f;setTextColor(Color.WHITE);setPadding(0,18,0,8)}
   val controls=LinearLayout(this).apply{gravity=Gravity.CENTER}
@@ -144,7 +144,7 @@ class MainActivity: AppCompatActivity() {
   val input=EditText(this).apply{hint="Wklej link YouTube…";setSingleLine(true)}
   AlertDialog.Builder(this)
    .setTitle("YouTube — AUDIO")
-   .setMessage("V13 pobiera dane odtwarzania bez strony HTML YouTube, więc nie korzysta z parsera ytInitialData.")
+   .setMessage("V14 pobiera dane odtwarzania bez strony HTML YouTube, więc nie korzysta z parsera ytInitialData.")
    .setView(input)
    .setNegativeButton("ANULUJ",null)
    .setPositiveButton("ODTWÓR"){_,_->playYouTubeDirect(input.text.toString())}
@@ -207,7 +207,50 @@ class MainActivity: AppCompatActivity() {
       bestUrl=url
      }
     }
-    val streamUrl=bestUrl?:throw IllegalStateException("YouTube nie zwrócił bezpośredniego URL audio")
+    var streamUrl=bestUrl
+    if (streamUrl.isNullOrBlank()) {
+     val fallbacks=listOf(
+      "https://pipedapi.kavin.rocks",
+      "https://pipedapi.adminforge.de",
+      "https://piped-api.privacy.com.de",
+      "https://api.piped.yt"
+     )
+     var lastFallbackError:Exception?=null
+     for(base in fallbacks){
+      try{
+       val api=(java.net.URL("$base/streams/$id").openConnection() as java.net.HttpURLConnection).apply{
+        requestMethod="GET"; connectTimeout=8000; readTimeout=12000; useCaches=false
+        setRequestProperty("Accept","application/json")
+        setRequestProperty("User-Agent","MusicPlayerV14/1.0")
+        setRequestProperty("Accept-Encoding","gzip")
+       }
+       val ac=api.responseCode
+       val ins=if(ac>=400) api.errorStream else api.inputStream
+       val txt=ins?.use{inp->
+        val enc=api.contentEncoding?.lowercase()?.trim()
+        val dec:InputStream=if(enc?.contains("gzip")==true) GZIPInputStream(inp) else inp
+        dec.use{it.bufferedReader(Charsets.UTF_8).readText()}
+       }?:""
+       if(ac !in 200..299) throw IllegalStateException("HTTP $ac")
+       val ar=org.json.JSONObject(txt).optJSONArray("audioStreams")
+       if(ar!=null){
+        var fbUrl:String?=null
+        var fbBitrate=0
+        for(j in 0 until ar.length()){
+         val a=ar.optJSONObject(j)?:continue
+         val u=a.optString("url","")
+         val br=a.optInt("bitrate",0)
+         val mt=a.optString("mimeType","")
+         if(u.isNotBlank() && (mt.isBlank() || mt.startsWith("audio/")) && br>=fbBitrate){
+          fbBitrate=br; fbUrl=u
+         }
+        }
+        if(!fbUrl.isNullOrBlank()){streamUrl=fbUrl;break}
+       }
+      }catch(e:Exception){lastFallbackError=e}
+     }
+     if(streamUrl.isNullOrBlank()) throw IllegalStateException("Brak bezpośredniego URL audio; fallback: "+(lastFallbackError?.message?:"brak odpowiedzi"))
+    }
     runOnUiThread{
      controller?.clearMediaItems()
      controller?.setMediaItem(
@@ -223,7 +266,7 @@ class MainActivity: AppCompatActivity() {
      Toast.makeText(this,"▶ Odtwarzanie audio",Toast.LENGTH_SHORT).show()
     }
    }catch(e:Exception){
-    Log.e("MusicPlayerV13","YouTube direct playback failed",e)
+    Log.e("MusicPlayerV14","YouTube direct playback failed",e)
     runOnUiThread{
      Toast.makeText(this,"YouTube: "+(e.message?:"nie udało się pobrać audio"),Toast.LENGTH_LONG).show()
     }
