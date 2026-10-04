@@ -162,7 +162,7 @@ class MainActivity: AppCompatActivity() {
       .addOption("--no-warnings")
       .addOption("-f",format)
       .addOption("--extractor-args","youtube:player_client=$clients")
-     val response=ytdlp.execute(request,null)
+     val response=ytdlp.execute(request)
      val files=dir.listFiles()?.filter{it.isFile && it.length()>1024}?.sortedByDescending{it.length()}?:emptyList()
      if(response.exitCode!=0 || files.isEmpty()) throw IllegalStateException("yt-dlp nie pobrał audio (kod "+response.exitCode+")")
      return files.first()
