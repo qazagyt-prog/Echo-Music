@@ -14,6 +14,19 @@ import java.util.zip.InflaterInputStream
 
 class NewPipeDownloader : Downloader() {
     override fun execute(request: Request): Response {
+        // YouTube currently may return a Service Worker (sw.js) layout that NewPipe's
+        // version detector cannot parse.  Supplying the hardcoded client version here
+        // avoids falling back to the old HTML/ytInitialData parser.
+        if (request.url().equals("https://www.youtube.com/sw.js")) {
+            val syntheticSw = "self.__ytcfg = {\"INNERTUBE_CONTEXT_CLIENT_VERSION\":\"2.20260120.01.00\"};"
+            return Response(
+                200,
+                "OK",
+                mapOf("Content-Type" to listOf("application/javascript")),
+                syntheticSw,
+                request.url()
+            )
+        }
         val connection = (URL(request.url()).openConnection() as HttpURLConnection).apply {
             requestMethod = request.httpMethod()
             instanceFollowRedirects = true
