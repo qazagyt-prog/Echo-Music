@@ -21,11 +21,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
-import org.schabi.newpipe.extractor.NewPipe
 import java.util.concurrent.Executors
-import java.io.InputStream
-import java.util.zip.GZIPInputStream
-import org.brotli.dec.BrotliInputStream
 
 class MainActivity: AppCompatActivity() {
  data class Song(val id:Long,val title:String,val artist:String,val album:String,val uri:android.net.Uri,val duration:Long)
@@ -42,20 +38,12 @@ class MainActivity: AppCompatActivity() {
 
  override fun onCreate(b:Bundle?){
   super.onCreate(b)
-  NewPipe.init(NewPipeDownloader())
-  try {
-   val cls=Class.forName("org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper")
-   val version=cls.getDeclaredField("clientVersion").apply{isAccessible=true}
-   version.set(null,"2.20260120.01.00")
-   val extracted=cls.getDeclaredField("clientVersionExtracted").apply{isAccessible=true}
-   extracted.setBoolean(null,true)
-  } catch(e:Exception){ Log.w("MusicPlayerV11","Could not preset YouTube client version",e) }
   buildUi();connect();requestPermission()
 }
 
  private fun buildUi(){
   val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(20,20,20,10);setBackgroundColor(Color.rgb(8,9,11))}
-  val title=TextView(this).apply{text="MUSIC PLAYER V14";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
+  val title=TextView(this).apply{text="MUSIC PLAYER V15";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
   search=EditText(this).apply{hint="Szukaj utworu, wykonawcy lub albumu…";setTextColor(Color.WHITE);setHintTextColor(Color.GRAY);setSingleLine(true)}
   now=TextView(this).apply{text="Brak utworu";textSize=17f;setTextColor(Color.WHITE);setPadding(0,18,0,8)}
   val controls=LinearLayout(this).apply{gravity=Gravity.CENTER}
@@ -144,7 +132,7 @@ class MainActivity: AppCompatActivity() {
   val input=EditText(this).apply{hint="Wklej link YouTube…";setSingleLine(true)}
   AlertDialog.Builder(this)
    .setTitle("YouTube — AUDIO")
-   .setMessage("V14 pobiera dane odtwarzania bez strony HTML YouTube, więc nie korzysta z parsera ytInitialData.")
+   .setMessage("V15 używa yt-dlp bezpośrednio na telefonie i wybiera najlepszy dostępny strumień audio.")
    .setView(input)
    .setNegativeButton("ANULUJ",null)
    .setPositiveButton("ODTWÓR"){_,_->playYouTubeDirect(input.text.toString())}
@@ -155,112 +143,28 @@ class MainActivity: AppCompatActivity() {
   val id=extractYouTubeId(value)?:run{
    Toast.makeText(this,"Nieprawidłowy link YouTube",Toast.LENGTH_LONG).show();return
   }
-  Toast.makeText(this,"Pobieram strumień audio…",Toast.LENGTH_SHORT).show()
+  val url="https://www.youtube.com/watch?v=$id"
+  Toast.makeText(this,"yt-dlp: pobieram strumień audio…",Toast.LENGTH_SHORT).show()
   executor.execute{
    try{
-    val endpoint="https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false"
-    val jsonBody="""{"context":{"client":{"clientName":"ANDROID","clientVersion":"21.03.36","androidSdkVersion":36,"hl":"pl","gl":"PL"}},"videoId":"$id","contentCheckOk":true,"racyCheckOk":true}"""
-    val conn=(java.net.URL(endpoint).openConnection() as java.net.HttpURLConnection).apply{
-     requestMethod="POST"
-     doOutput=true
-     connectTimeout=15000
-     readTimeout=20000
-     useCaches=false
-     setRequestProperty("Content-Type","application/json")
-     setRequestProperty("Accept","application/json")
-     setRequestProperty("User-Agent","com.google.android.youtube/21.03.36 (Linux; U; Android 16; PL) gzip")
-     setRequestProperty("X-Goog-Api-Format-Version","2")
-     setRequestProperty("X-YouTube-Client-Name","3")
-     setRequestProperty("X-YouTube-Client-Version","21.03.36")
-     setRequestProperty("Accept-Encoding","gzip")
+    val ydl=com.yausername.youtubedl_android.YoutubeDL.getInstance()
+    ydl.init(applicationContext)
+    try {
+     ydl.updateYoutubeDL(applicationContext, com.yausername.youtubedl_android.YoutubeDL.UpdateChannel.NIGHTLY)
+    } catch(updateError:Exception) {
+     Log.w("MusicPlayerV15","yt-dlp update skipped",updateError)
     }
-    conn.outputStream.use{it.write(jsonBody.toByteArray(Charsets.UTF_8))}
-    val code=conn.responseCode
-    val stream=if(code>=400) conn.errorStream else conn.inputStream
-    val raw=stream?.use { input ->
-     val encoding=conn.contentEncoding?.lowercase()?.trim()
-     val decoded: InputStream = when {
-      encoding?.contains("br")==true -> BrotliInputStream(input)
-      encoding?.contains("gzip")==true -> GZIPInputStream(input)
-      else -> input
-     }
-     decoded.use { it.bufferedReader(Charsets.UTF_8).readText() }
-    }?:""
-    if(code !in 200..299) throw IllegalStateException("YouTube HTTP $code")
-    val root=org.json.JSONObject(raw)
-    val status=root.optJSONObject("playabilityStatus")?.optString("status","")
-    if(status!="OK") throw IllegalStateException(root.optJSONObject("playabilityStatus")?.optString("reason","Film niedostępny")?:"Film niedostępny")
-    val details=root.optJSONObject("videoDetails")
-    val title=details?.optString("title","YouTube")?:"YouTube"
-    val author=details?.optString("author","YouTube")?:"YouTube"
-    val formats=root.optJSONObject("streamingData")?.optJSONArray("adaptiveFormats")
-     ?:throw IllegalStateException("Brak strumieni audio")
-    var bestUrl:String?=null
-    var bestBitrate=0
-    for(i in 0 until formats.length()){
-     val f=formats.optJSONObject(i)?:continue
-     val mime=f.optString("mimeType","")
-     val url=f.optString("url","")
-     val bitrate=f.optInt("averageBitrate",f.optInt("bitrate",0))
-     if(mime.startsWith("audio/") && url.isNotBlank() && bitrate>=bestBitrate){
-      bestBitrate=bitrate
-      bestUrl=url
-     }
+    val request=com.yausername.youtubedl_android.YoutubeDLRequest(url).apply{
+     addOption("-f","bestaudio/best")
+     addOption("--no-playlist")
+     addOption("--extractor-args","youtube:player_client=android")
+     addOption("--no-warnings")
     }
-    var streamUrl=bestUrl
-    if (streamUrl.isNullOrBlank()) {
-     val fallbacks=listOf(
-      "https://pipedapi.kavin.rocks",
-      "https://pipedapi.leptons.xyz",
-      "https://pipedapi.nosebs.ru",
-      "https://pipedapi.adminforge.de",
-      "https://piped-api.privacy.com.de",
-      "https://pipedapi.drgns.space",
-      "https://pipedapi.owo.si",
-      "https://pipedapi.ducks.party",
-      "https://piped-api.codespace.cz",
-      "https://pipedapi.reallyaweso.me",
-      "https://api.piped.private.coffee",
-      "https://pipedapi.darkness.services",
-      "https://pipedapi.orangenet.cc",
-      "https://api.piped.yt"
-     )
-     var lastFallbackError:Exception?=null
-     for(base in fallbacks){
-      try{
-       val api=(java.net.URL("$base/streams/$id").openConnection() as java.net.HttpURLConnection).apply{
-        requestMethod="GET"; connectTimeout=8000; readTimeout=12000; useCaches=false
-        setRequestProperty("Accept","application/json")
-        setRequestProperty("User-Agent","MusicPlayerV14/1.0")
-        setRequestProperty("Accept-Encoding","gzip")
-       }
-       val ac=api.responseCode
-       val ins=if(ac>=400) api.errorStream else api.inputStream
-       val txt=ins?.use{inp->
-        val enc=api.contentEncoding?.lowercase()?.trim()
-        val dec:InputStream=if(enc?.contains("gzip")==true) GZIPInputStream(inp) else inp
-        dec.use{it.bufferedReader(Charsets.UTF_8).readText()}
-       }?:""
-       if(ac !in 200..299) throw IllegalStateException("HTTP $ac")
-       val ar=org.json.JSONObject(txt).optJSONArray("audioStreams")
-       if(ar!=null){
-        var fbUrl:String?=null
-        var fbBitrate=0
-        for(j in 0 until ar.length()){
-         val a=ar.optJSONObject(j)?:continue
-         val u=a.optString("url","")
-         val br=a.optInt("bitrate",0)
-         val mt=a.optString("mimeType","")
-         if(u.isNotBlank() && (mt.isBlank() || mt.startsWith("audio/")) && br>=fbBitrate){
-          fbBitrate=br; fbUrl=u
-         }
-        }
-        if(!fbUrl.isNullOrBlank()){streamUrl=fbUrl;break}
-       }
-      }catch(e:Exception){lastFallbackError=e}
-     }
-     if(streamUrl.isNullOrBlank()) throw IllegalStateException("Brak bezpośredniego URL audio; sprawdzone instancje: "+(lastFallbackError?.message?:"brak odpowiedzi"))
-    }
+    val info=ydl.getInfo(request)
+    val streamUrl=info.url
+    if(streamUrl.isNullOrBlank()) throw IllegalStateException("yt-dlp nie zwrócił URL audio")
+    val title=info.title?.ifBlank{"YouTube"}?:"YouTube"
+    val author=info.uploader?.ifBlank{"YouTube"}?:"YouTube"
     runOnUiThread{
      controller?.clearMediaItems()
      controller?.setMediaItem(
@@ -276,9 +180,10 @@ class MainActivity: AppCompatActivity() {
      Toast.makeText(this,"▶ Odtwarzanie audio",Toast.LENGTH_SHORT).show()
     }
    }catch(e:Exception){
-    Log.e("MusicPlayerV14","YouTube direct playback failed",e)
+    Log.e("MusicPlayerV15","YouTube/yt-dlp failed",e)
     runOnUiThread{
-     Toast.makeText(this,"YouTube: "+(e.message?:"nie udało się pobrać audio"),Toast.LENGTH_LONG).show()
+     val msg=e.message?.replace("\n"," ")?.take(220) ?: "nie udało się pobrać audio"
+     Toast.makeText(this,"YouTube: $msg",Toast.LENGTH_LONG).show()
     }
    }
   }
