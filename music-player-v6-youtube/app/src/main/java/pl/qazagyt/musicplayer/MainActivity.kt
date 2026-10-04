@@ -147,8 +147,7 @@ class MainActivity: AppCompatActivity() {
   Toast.makeText(this,"V16: przygotowuję audio z YouTube…",Toast.LENGTH_SHORT).show()
   executor.execute{
    try{
-    val ytdlp=dev.ffmpegkit_maintained.ytdlp.YtDlp
-    ytdlp.init(applicationContext)
+    dev.ffmpegkit_maintained.ytdlp.YtDlp.init(applicationContext)
     val dir=java.io.File(cacheDir,"youtube")
     dir.mkdirs()
     dir.listFiles()?.forEach{it.delete()}
@@ -162,7 +161,7 @@ class MainActivity: AppCompatActivity() {
       .addOption("--no-warnings")
       .addOption("-f",format)
       .addOption("--extractor-args","youtube:player_client=$clients")
-     val response=ytdlp.execute(request)
+     val response=dev.ffmpegkit_maintained.ytdlp.YtDlp.execute(request,null)
      val files=dir.listFiles()?.filter{it.isFile && it.length()>1024}?.sortedByDescending{it.length()}?:emptyList()
      if(response.exitCode!=0 || files.isEmpty()) throw IllegalStateException("yt-dlp nie pobrał audio (kod "+response.exitCode+")")
      return files.first()
