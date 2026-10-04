@@ -226,6 +226,7 @@ import echo.music.iad1tya.ui.theme.PlayerColorExtractor
 import echo.music.iad1tya.ui.theme.PlayerSliderColors
 import echo.music.iad1tya.ui.utils.ShowMediaInfo
 import echo.music.iad1tya.ui.utils.ShowOffsetDialog
+import echo.music.iad1tya.utils.YTPlayerUtils
 import echo.music.iad1tya.utils.isLocalMediaId
 import echo.music.iad1tya.utils.makeTimeString
 import echo.music.iad1tya.utils.rememberEnumPreference
@@ -695,6 +696,8 @@ fun BottomSheetPlayer(
     )
 
   var canvasArtwork by remember(mediaMetadata?.id) { mutableStateOf<CanvasArtwork?>(null) }
+  var showMusicVideo by rememberSaveable { mutableStateOf(false) }
+  var musicVideoUrl by remember(mediaMetadata?.id) { mutableStateOf<String?>(null) }
   var canvasFetchInFlight by remember(mediaMetadata?.id) { mutableStateOf(false) }
 
   LaunchedEffect(mediaMetadata?.id, playerBackground) {
@@ -767,6 +770,18 @@ fun BottomSheetPlayer(
         canvasFetchInFlight = false
       }
     }
+  }
+
+  LaunchedEffect(mediaMetadata?.id, showMusicVideo) {
+    val item = mediaMetadata ?: return@LaunchedEffect
+    if (!showMusicVideo || !item.isVideoSong || item.id.isBlank()) {
+      musicVideoUrl = null
+      return@LaunchedEffect
+    }
+    musicVideoUrl =
+      withContext(Dispatchers.IO) {
+        YTPlayerUtils.videoStreamUrl(item.id).getOrNull()
+      }
   }
 
   val (textButtonColor, iconButtonColor) =
@@ -1460,6 +1475,15 @@ fun BottomSheetPlayer(
           }
           PlayerBackgroundStyle.DEFAULT -> {}
         }
+
+        if (showMusicVideo && !musicVideoUrl.isNullOrBlank()) {
+          BackgroundVideoView(
+            videoUrl = musicVideoUrl!!,
+            isPlaying = isPlaying,
+            positionMs = position,
+            modifier = Modifier.fillMaxSize()
+          )
+        }
       }
     },
     onDismiss = {
@@ -1992,6 +2016,31 @@ fun BottomSheetPlayer(
             }
           }
         }
+      }
+
+      if (mediaMetadata.isVideoSong) {
+        Box(
+          modifier = Modifier.fillMaxWidth().padding(horizontal = PlayerHorizontalPadding),
+          contentAlignment = Alignment.Center
+        ) {
+          FilledIconButton(
+            onClick = { showMusicVideo = !showMusicVideo },
+            colors =
+              IconButtonDefaults.filledIconButtonColors(
+                containerColor =
+                  if (showMusicVideo) textButtonColor else textButtonColor.copy(alpha = 0.2f),
+                contentColor = if (showMusicVideo) iconButtonColor else textButtonColor
+              ),
+            modifier = Modifier.height(38.dp)
+          ) {
+            Text(
+              text = if (showMusicVideo) "AUDIO" else "VIDEO",
+              fontWeight = FontWeight.Bold,
+              fontSize = 12.sp
+            )
+          }
+        }
+        Spacer(Modifier.height(8.dp))
       }
 
       Spacer(Modifier.height(if (useNewPlayerDesign) 24.dp else 20.dp))
@@ -3121,6 +3170,7 @@ private fun PlayerMoreMenuButton(
 private fun BackgroundVideoView(
   videoUrl: String,
   isPlaying: Boolean,
+  positionMs: Long = 0L,
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
@@ -3187,6 +3237,16 @@ private fun BackgroundVideoView(
   }
 
   LaunchedEffect(isPlaying) { exoPlayer.playWhenReady = isPlaying }
+
+  LaunchedEffect(videoUrl) {
+    exoPlayer.seekTo(positionMs.coerceAtLeast(0L))
+  }
+
+  LaunchedEffect(positionMs) {
+    if (kotlin.math.abs(exoPlayer.currentPosition - positionMs) > 1500L) {
+      exoPlayer.seekTo(positionMs.coerceAtLeast(0L))
+    }
+  }
 
   DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
 
