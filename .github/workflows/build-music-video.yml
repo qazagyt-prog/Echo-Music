@@ -20,12 +20,6 @@ jobs:
           java-version: '21'
           cache: gradle
 
-      - name: Verify Android SDK
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          sdkmanager --version
-          yes | sdkmanager --licenses >/dev/null || true
-
       - name: Build FOSS universal debug APK
         run: |
           chmod +x ./gradlew
