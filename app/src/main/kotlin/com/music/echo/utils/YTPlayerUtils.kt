@@ -277,13 +277,42 @@ object YTPlayerUtils {
     )
   }
 
-  /** Resolve a muxed YouTube video stream for the in-player music video. */
+  /**
+   * Resolve a progressive (muxed video + audio) YouTube stream for the in-player music video.
+   *
+   * We deliberately use progressive streams here: the existing music service keeps owning the
+   * audio clock, so the video surface only needs one self-contained media URL. This also avoids
+   * trying to manually merge separate DASH video/audio streams.
+   *
+   * Prefer common MP4 progressive itags, but do not require one specific itag to exist. YouTube can
+   * change the set of formats returned by a client, and NewPipe exposes the actual available
+   * streams at runtime.
+   */
   suspend fun videoStreamUrl(videoId: String): Result<String> = runCatching {
     require(videoId.isNotBlank()) { "Empty videoId" }
-    val streams = withContext(Dispatchers.IO) { YouTube.getNewPipeStreamUrls(videoId) }
-    streams.firstOrNull { it.first == 22 && it.second.isNotBlank() }?.second
-      ?: streams.firstOrNull { it.first == 18 && it.second.isNotBlank() }?.second
-      ?: throw IllegalStateException("No compatible combined video stream found")
+
+    val streams = withContext(Dispatchers.IO) {
+      extractionMutex.withLock { YouTube.getNewPipeStreamUrls(videoId) }
+    }
+
+    // Prefer higher-quality common progressive MP4 formats when available.
+    val preferredItags = intArrayOf(22, 18, 37, 59, 43, 36, 17)
+    val preferred =
+      preferredItags.asSequence()
+        .mapNotNull { itag ->
+          streams.firstOrNull { it.first == itag && it.second.isNotBlank() }?.second
+        }
+        .firstOrNull()
+
+    preferred
+      ?: streams
+        .asSequence()
+        .filter { it.first in preferredItags && it.second.isNotBlank() }
+        .map { it.second }
+        .firstOrNull()
+      ?: throw IllegalStateException(
+        "No progressive video stream available for this video"
+      )
   }
 
   suspend fun playerResponseForMetadata(
