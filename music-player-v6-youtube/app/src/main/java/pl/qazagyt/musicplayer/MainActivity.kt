@@ -23,6 +23,9 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import org.schabi.newpipe.extractor.NewPipe
 import java.util.concurrent.Executors
+import java.io.InputStream
+import java.util.zip.GZIPInputStream
+import org.brotli.dec.BrotliInputStream
 
 class MainActivity: AppCompatActivity() {
  data class Song(val id:Long,val title:String,val artist:String,val album:String,val uri:android.net.Uri,val duration:Long)
@@ -52,7 +55,7 @@ class MainActivity: AppCompatActivity() {
 
  private fun buildUi(){
   val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(20,20,20,10);setBackgroundColor(Color.rgb(8,9,11))}
-  val title=TextView(this).apply{text="MUSIC PLAYER V12";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
+  val title=TextView(this).apply{text="MUSIC PLAYER V13";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
   search=EditText(this).apply{hint="Szukaj utworu, wykonawcy lub albumu…";setTextColor(Color.WHITE);setHintTextColor(Color.GRAY);setSingleLine(true)}
   now=TextView(this).apply{text="Brak utworu";textSize=17f;setTextColor(Color.WHITE);setPadding(0,18,0,8)}
   val controls=LinearLayout(this).apply{gravity=Gravity.CENTER}
@@ -141,7 +144,7 @@ class MainActivity: AppCompatActivity() {
   val input=EditText(this).apply{hint="Wklej link YouTube…";setSingleLine(true)}
   AlertDialog.Builder(this)
    .setTitle("YouTube — AUDIO")
-   .setMessage("V12 pobiera dane odtwarzania bez strony HTML YouTube, więc nie korzysta z parsera ytInitialData.")
+   .setMessage("V13 pobiera dane odtwarzania bez strony HTML YouTube, więc nie korzysta z parsera ytInitialData.")
    .setView(input)
    .setNegativeButton("ANULUJ",null)
    .setPositiveButton("ODTWÓR"){_,_->playYouTubeDirect(input.text.toString())}
@@ -174,7 +177,15 @@ class MainActivity: AppCompatActivity() {
     conn.outputStream.use{it.write(jsonBody.toByteArray(Charsets.UTF_8))}
     val code=conn.responseCode
     val stream=if(code>=400) conn.errorStream else conn.inputStream
-    val raw=stream?.use{it.bufferedReader().readText()}?:""
+    val raw=stream?.use { input ->
+     val encoding=conn.contentEncoding?.lowercase()?.trim()
+     val decoded: InputStream = when {
+      encoding?.contains("br")==true -> BrotliInputStream(input)
+      encoding?.contains("gzip")==true -> GZIPInputStream(input)
+      else -> input
+     }
+     decoded.use { it.bufferedReader(Charsets.UTF_8).readText() }
+    }?:""
     if(code !in 200..299) throw IllegalStateException("YouTube HTTP $code")
     val root=org.json.JSONObject(raw)
     val status=root.optJSONObject("playabilityStatus")?.optString("status","")
@@ -212,7 +223,7 @@ class MainActivity: AppCompatActivity() {
      Toast.makeText(this,"▶ Odtwarzanie audio",Toast.LENGTH_SHORT).show()
     }
    }catch(e:Exception){
-    Log.e("MusicPlayerV12","YouTube direct playback failed",e)
+    Log.e("MusicPlayerV13","YouTube direct playback failed",e)
     runOnUiThread{
      Toast.makeText(this,"YouTube: "+(e.message?:"nie udało się pobrać audio"),Toast.LENGTH_LONG).show()
     }
