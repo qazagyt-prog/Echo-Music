@@ -50,12 +50,17 @@ class MainActivity: AppCompatActivity() {
   controls.addView(button("⏭"){controller?.seekToNext()})
   controls.addView(button("🔀"){controller?.shuffleModeEnabled=!(controller?.shuffleModeEnabled?:false)})
   controls.addView(button("🔁"){controller?.let{it.repeatMode=if(it.repeatMode==Player.REPEAT_MODE_OFF)Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF}})
-  val tabs=LinearLayout(this).apply{gravity=Gravity.CENTER}
-  tabs.addView(button("UTWORY"){filter("")})
-  tabs.addView(button("♥ ULUBIONE"){filter("fav")})
-  tabs.addView(button("ODŚWIEŻ"){load()})
-  tabs.addView(button("▶ PEŁNY"){showPlayer()})
-  tabs.addView(button("▶ YOUTUBE"){showYouTube()})
+  // Two rows so the YouTube control is always visible on narrow phones.
+  val tabs=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
+  val row1=LinearLayout(this).apply{gravity=Gravity.CENTER}
+  row1.addView(button("UTWORY"){filter("")})
+  row1.addView(button("♥ ULUBIONE"){filter("fav")})
+  row1.addView(button("ODŚWIEŻ"){load()})
+  row1.addView(button("▶ PEŁNY"){showPlayer()})
+  val row2=LinearLayout(this).apply{gravity=Gravity.CENTER}
+  row2.addView(button("▶ YOUTUBE AUDIO"){showYouTube()})
+  tabs.addView(row1)
+  tabs.addView(row2)
   adapter=ArrayAdapter(this,android.R.layout.simple_list_item_2,android.R.id.text1,ArrayList<String>())
   val list=ListView(this).apply{adapter=this@MainActivity.adapter;setOnItemClickListener{_,_,p,_->playSong(visible[p])}}
   search.addTextChangedListener(object:android.text.TextWatcher{
