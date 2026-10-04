@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/music-video-player
+  workflow_dispatch:
 
 jobs:
   build:
@@ -17,9 +18,15 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Verify Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          sdkmanager --version
+          yes | sdkmanager --licenses >/dev/null || true
 
       - name: Build FOSS universal debug APK
-        run: ./gradlew assembleUniversalFossDebug --stacktrace
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleUniversalFossDebug --stacktrace
