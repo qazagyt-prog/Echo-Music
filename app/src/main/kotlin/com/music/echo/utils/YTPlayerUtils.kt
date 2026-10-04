@@ -22,6 +22,8 @@ import echo.music.iad1tya.utils.YTPlayerUtils.validateStatus
 import echo.music.iad1tya.utils.cipher.CipherDeobfuscator
 import echo.music.iad1tya.utils.potoken.PoTokenGenerator
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -273,6 +275,15 @@ object YTPlayerUtils {
       streamExpiresInSeconds = 21600,
       headers = extracted.headers
     )
+  }
+
+  /** Resolve a muxed YouTube video stream for the in-player music video. */
+  suspend fun videoStreamUrl(videoId: String): Result<String> = runCatching {
+    require(videoId.isNotBlank()) { "Empty videoId" }
+    val streams = withContext(Dispatchers.IO) { YouTube.getNewPipeStreamUrls(videoId) }
+    streams.firstOrNull { it.first == 22 && it.second.isNotBlank() }?.second
+      ?: streams.firstOrNull { it.first == 18 && it.second.isNotBlank() }?.second
+      ?: throw IllegalStateException("No compatible combined video stream found")
   }
 
   suspend fun playerResponseForMetadata(
