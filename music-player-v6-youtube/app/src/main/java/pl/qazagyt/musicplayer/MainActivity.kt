@@ -132,7 +132,7 @@ class MainActivity: AppCompatActivity() {
   val input=EditText(this).apply{hint="Wklej link YouTube…";setSingleLine(true)}
   AlertDialog.Builder(this)
    .setTitle("YouTube — AUDIO")
-   .setMessage("V15 używa yt-dlp bezpośrednio na telefonie i wybiera najlepszy dostępny strumień audio.")
+   .setMessage("V16 używa yt-dlp bezpośrednio na telefonie i omija problematyczne klienty YouTube.")
    .setView(input)
    .setNegativeButton("ANULUJ",null)
    .setPositiveButton("ODTWÓR"){_,_->playYouTubeDirect(input.text.toString())}
@@ -167,11 +167,11 @@ class MainActivity: AppCompatActivity() {
      return files.first()
     }
     val file=try{
-     download("bestaudio/best","web_embedded,android_vr")
+     download("best[acodec!=none][height<=360]/best[acodec!=none]/best","web_embedded")
     }catch(first:Exception){
      Log.w("MusicPlayerV16","Audio-only extraction failed; retrying with compatible A/V format",first)
      dir.listFiles()?.forEach{it.delete()}
-     download("best[acodec!=none]/best","web_embedded,android_vr")
+     download("best[acodec!=none][height<=360]/best[acodec!=none]/best","web_embedded")
     }
     val title=file.nameWithoutExtension.replace('_',' ').ifBlank{"YouTube"}
     runOnUiThread{
