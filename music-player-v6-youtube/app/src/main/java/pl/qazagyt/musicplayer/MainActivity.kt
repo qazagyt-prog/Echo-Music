@@ -1,8 +1,6 @@
 package pl.qazagyt.musicplayer
 
 import android.Manifest
-import android.app.Dialog
-import android.app.AlertDialog
 import android.content.ComponentName
 import android.content.ContentUris
 import android.content.Context
@@ -12,17 +10,18 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.view.Gravity
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import android.view.ViewGroup
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import org.schabi.newpipe.extractor.NewPipe
+import java.util.concurrent.Executors
 
 class MainActivity: AppCompatActivity() {
  data class Song(val id:Long,val title:String,val artist:String,val album:String,val uri:android.net.Uri,val duration:Long)
@@ -34,19 +33,20 @@ class MainActivity: AppCompatActivity() {
  private lateinit var now:TextView
  private lateinit var play:Button
  private val prefs by lazy { getSharedPreferences("player", Context.MODE_PRIVATE) }
+ private val executor=Executors.newSingleThreadExecutor()
  private val permission=registerForActivityResult(ActivityResultContracts.RequestPermission()){ load() }
 
- override fun onCreate(b:Bundle?){ super.onCreate(b); buildUi(); connect(); requestPermission() }
+ override fun onCreate(b:Bundle?){super.onCreate(b);NewPipe.init(NewPipeDownloader());buildUi();connect();requestPermission()}
 
  private fun buildUi(){
   val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(20,20,20,10);setBackgroundColor(Color.rgb(8,9,11))}
-  val title=TextView(this).apply{text="MUSIC PLAYER V5";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
+  val title=TextView(this).apply{text="MUSIC PLAYER V7";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
   search=EditText(this).apply{hint="Szukaj utworu, wykonawcy lub albumu…";setTextColor(Color.WHITE);setHintTextColor(Color.GRAY);setSingleLine(true)}
   now=TextView(this).apply{text="Brak utworu";textSize=17f;setTextColor(Color.WHITE);setPadding(0,18,0,8)}
   val controls=LinearLayout(this).apply{gravity=Gravity.CENTER}
   fun button(t:String,a:()->Unit)=Button(this).apply{text=t;setOnClickListener{a()}}
   controls.addView(button("⏮"){controller?.seekToPrevious()})
-  play=button("▶"){controller?.let{if(it.isPlaying)it.pause()else it.play()}}; controls.addView(play)
+  play=button("▶"){controller?.let{if(it.isPlaying)it.pause()else it.play()}};controls.addView(play)
   controls.addView(button("⏭"){controller?.seekToNext()})
   controls.addView(button("🔀"){controller?.shuffleModeEnabled=!(controller?.shuffleModeEnabled?:false)})
   controls.addView(button("🔁"){controller?.let{it.repeatMode=if(it.repeatMode==Player.REPEAT_MODE_OFF)Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF}})
@@ -99,27 +99,20 @@ class MainActivity: AppCompatActivity() {
     songs+=Song(id,q.getString(1)?:"Nieznany",q.getString(2)?:"Nieznany",q.getString(3)?:"Nieznany album",ContentUris.withAppendedId(base,id),q.getLong(4))
    }
   }
-  c.setMediaItems(songs.map{MediaItem.Builder().setUri(it.uri).setMediaId(it.id.toString()).setMediaMetadata(androidx.media3.common.MediaMetadata.Builder().setTitle(it.title).setArtist(it.artist).setAlbumTitle(it.album).build()).build()})
-  c.prepare()
-  filter("")
+  c.setMediaItems(songs.map{MediaItem.Builder().setUri(it.uri).setMediaId(it.id.toString()).setMediaMetadata(MediaMetadata.Builder().setTitle(it.title).setArtist(it.artist).setAlbumTitle(it.album).build()).build()})
+  c.prepare();filter("")
  }
 
  private fun filter(q:String){
   visible.clear()
   val l=if(q=="fav")songs.filter{prefs.getBoolean("fav_"+it.id,false)} else songs.filter{q.isBlank()||it.title.contains(q,true)||it.artist.contains(q,true)||it.album.contains(q,true)}
-  visible.addAll(l)
-  adapter.clear()
-  adapter.addAll(l.map{it.title+"\n"+it.artist+" • "+it.album})
-  adapter.notifyDataSetChanged()
+  visible.addAll(l);adapter.clear();adapter.addAll(l.map{it.title+"\n"+it.artist+" • "+it.album});adapter.notifyDataSetChanged()
  }
 
- private fun playSong(s:Song){
-  val i=songs.indexOfFirst{it.id==s.id}
-  if(i>=0){controller?.seekToDefaultPosition(i);controller?.play()}
- }
+ private fun playSong(s:Song){val i=songs.indexOfFirst{it.id==s.id};if(i>=0){controller?.seekToDefaultPosition(i);controller?.play()}}
 
  private fun showPlayer(){
-  val d=Dialog(this)
+  val d=android.app.Dialog(this)
   val box=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER;setPadding(30,30,30,30);setBackgroundColor(Color.rgb(8,9,11))}
   val t=TextView(this).apply{text=now.text;textSize=25f;setTextColor(Color.WHITE);gravity=Gravity.CENTER}
   val b=Button(this).apply{text="▶ / ⏸";setOnClickListener{controller?.let{if(it.isPlaying)it.pause()else it.play()}}}
@@ -127,38 +120,39 @@ class MainActivity: AppCompatActivity() {
   box.addView(t);box.addView(b);box.addView(close);d.setContentView(box);d.show()
  }
 
-
  private fun showYouTube(){
   val input=EditText(this).apply{hint="Wklej link YouTube…";setSingleLine(true)}
-  AlertDialog.Builder(this).setTitle("YouTube").setMessage("Wklej link do filmu lub Shorts. Odtwarzanie odbywa się w osadzonym odtwarzaczu YouTube.").setView(input).setNegativeButton("ANULUJ",null).setPositiveButton("ODTWÓR"){_,_->openYouTube(input.text.toString())}.show()
+  AlertDialog.Builder(this).setTitle("YouTube — BEZ REKLAM").setMessage("Wklej link do filmu. V7 pobierze dostępny strumień audio i odtworzy go bez osadzonego odtwarzacza YouTube.").setView(input).setNegativeButton("ANULUJ",null).setPositiveButton("ODTWÓR"){_,_->playYouTube(input.text.toString())}.show()
  }
 
- private fun openYouTube(value:String){
-  val id=extractYouTubeId(value) ?: run{Toast.makeText(this,"Nieprawidłowy link YouTube",Toast.LENGTH_LONG).show();return}
-  val web=WebView(this).apply{
-   settings.javaScriptEnabled=true
-   settings.domStorageEnabled=true
-   settings.mediaPlaybackRequiresUserGesture=false
-   webViewClient=WebViewClient()
-   loadDataWithBaseURL("https://www.youtube.com","<!doctype html><html><body style='margin:0;background:#000'><iframe width='100%' height='100%' src='https://www.youtube.com/embed/$id?autoplay=1&playsinline=1' frameborder='0' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe></body></html>","text/html","UTF-8",null)
+ private fun playYouTube(value:String){
+  val id=extractYouTubeId(value)?:run{Toast.makeText(this,"Nieprawidłowy link YouTube",Toast.LENGTH_LONG).show();return}
+  val url="https://www.youtube.com/watch?v=$id"
+  Toast.makeText(this,"Pobieram strumień audio…",Toast.LENGTH_SHORT).show()
+  executor.execute{
+   try{
+    val extractor=NewPipe.getService("YouTube").getStreamExtractor(url)
+    extractor.fetchPage()
+    val streams=extractor.getAudioStreams()
+    val audio=streams.maxByOrNull{b->if(b.getAverageBitrate()>0)b.getAverageBitrate() else b.getBitrate()}?:throw IllegalStateException("Brak dostępnego strumienia audio")
+    val streamUrl=audio.getContent()
+    val title=extractor.getName()
+    runOnUiThread{
+     controller?.clearMediaItems()
+     controller?.setMediaItem(MediaItem.Builder().setMediaId("youtube:$id").setUri(streamUrl).setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist("YouTube").build()).build())
+     controller?.prepare();controller?.play();now.text="$title — YouTube"
+     Toast.makeText(this,"▶ Odtwarzanie bez reklam",Toast.LENGTH_SHORT).show()
+    }
+   }catch(e:Exception){runOnUiThread{Toast.makeText(this,"YouTube: "+(e.message?:"nie udało się pobrać audio"),Toast.LENGTH_LONG).show()}}
   }
-  val d=Dialog(this)
-  d.setTitle("YouTube")
-  d.setContentView(web,ViewGroup.LayoutParams(-1,-1))
-  d.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT)
-  d.show()
-  d.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT)
  }
 
  private fun extractYouTubeId(value:String):String?{
   val v=value.trim()
-  if(v.matches(Regex("^[A-Za-z0-9_-]{11}$"))) return v
-  val patterns=listOf(
-   Regex("""(?:v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)([A-Za-z0-9_-]{11})"""),
-   Regex("""youtube\.com/watch/[^?]*[?&]v=([A-Za-z0-9_-]{11})""")
-  )
+  if(v.matches(Regex("^[A-Za-z0-9_-]{11}$")))return v
+  val patterns=listOf(Regex("""(?:v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)([A-Za-z0-9_-]{11})"""),Regex("""youtube\.com/watch/[^?]*[?&]v=([A-Za-z0-9_-]{11})"""))
   return patterns.firstNotNullOfOrNull{it.find(v)?.groupValues?.getOrNull(1)}
  }
 
- override fun onDestroy(){controller?.release();super.onDestroy()}
+ override fun onDestroy(){executor.shutdownNow();controller?.release();super.onDestroy()}
 }
