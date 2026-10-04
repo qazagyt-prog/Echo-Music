@@ -52,7 +52,7 @@ class MainActivity: AppCompatActivity() {
 
  private fun buildUi(){
   val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(20,20,20,10);setBackgroundColor(Color.rgb(8,9,11))}
-  val title=TextView(this).apply{text="MUSIC PLAYER V11";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
+  val title=TextView(this).apply{text="MUSIC PLAYER V12";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
   search=EditText(this).apply{hint="Szukaj utworu, wykonawcy lub albumu…";setTextColor(Color.WHITE);setHintTextColor(Color.GRAY);setSingleLine(true)}
   now=TextView(this).apply{text="Brak utworu";textSize=17f;setTextColor(Color.WHITE);setPadding(0,18,0,8)}
   val controls=LinearLayout(this).apply{gravity=Gravity.CENTER}
@@ -139,35 +139,84 @@ class MainActivity: AppCompatActivity() {
 
  private fun showYouTube(){
   val input=EditText(this).apply{hint="Wklej link YouTube…";setSingleLine(true)}
-  AlertDialog.Builder(this).setTitle("YouTube — BEZ REKLAM").setMessage("Wklej link do filmu. V11 pobierze dostępny strumień audio i odtworzy go bez osadzonego odtwarzacza YouTube.").setView(input).setNegativeButton("ANULUJ",null).setPositiveButton("ODTWÓR"){_,_->playYouTube(input.text.toString())}.show()
+  AlertDialog.Builder(this)
+   .setTitle("YouTube — AUDIO")
+   .setMessage("V12 pobiera dane odtwarzania bez strony HTML YouTube, więc nie korzysta z parsera ytInitialData.")
+   .setView(input)
+   .setNegativeButton("ANULUJ",null)
+   .setPositiveButton("ODTWÓR"){_,_->playYouTubeDirect(input.text.toString())}
+   .show()
  }
 
- private fun playYouTube(value:String){
-  val id=extractYouTubeId(value)?:run{Toast.makeText(this,"Nieprawidłowy link YouTube",Toast.LENGTH_LONG).show();return}
-  val url="https://www.youtube.com/watch?v=$id"
+ private fun playYouTubeDirect(value:String){
+  val id=extractYouTubeId(value)?:run{
+   Toast.makeText(this,"Nieprawidłowy link YouTube",Toast.LENGTH_LONG).show();return
+  }
   Toast.makeText(this,"Pobieram strumień audio…",Toast.LENGTH_SHORT).show()
   executor.execute{
    try{
-    val extractor=NewPipe.getService("YouTube").getStreamExtractor(url)
-    extractor.fetchPage()
-    val streams=extractor.getAudioStreams()
-    val audio=streams.maxByOrNull{b->if(b.getAverageBitrate()>0)b.getAverageBitrate() else b.getBitrate()}?:throw IllegalStateException("Brak dostępnego strumienia audio")
-    val streamUrl=audio.getContent()
-    if (streamUrl.isNullOrBlank()) throw IllegalStateException("YouTube returned an empty audio URL")
-    val title=extractor.getName()
-    runOnUiThread{
-     controller?.clearMediaItems()
-     controller?.setMediaItem(MediaItem.Builder().setMediaId("youtube:$id").setUri(streamUrl).setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist("YouTube").build()).build())
-     controller?.prepare();controller?.play();now.text="$title — YouTube"
-     Toast.makeText(this,"▶ Odtwarzanie bez reklam",Toast.LENGTH_SHORT).show()
+    val endpoint="https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false"
+    val jsonBody="""{"context":{"client":{"clientName":"ANDROID","clientVersion":"21.03.36","androidSdkVersion":36,"hl":"pl","gl":"PL"}},"videoId":"$id","contentCheckOk":true,"racyCheckOk":true}"""
+    val conn=(java.net.URL(endpoint).openConnection() as java.net.HttpURLConnection).apply{
+     requestMethod="POST"
+     doOutput=true
+     connectTimeout=15000
+     readTimeout=20000
+     useCaches=false
+     setRequestProperty("Content-Type","application/json")
+     setRequestProperty("Accept","application/json")
+     setRequestProperty("User-Agent","com.google.android.youtube/21.03.36 (Linux; U; Android 16; PL) gzip")
+     setRequestProperty("X-Goog-Api-Format-Version","2")
+     setRequestProperty("X-YouTube-Client-Name","3")
+     setRequestProperty("X-YouTube-Client-Version","21.03.36")
+     setRequestProperty("Accept-Encoding","gzip")
     }
-   }catch(e:Exception){
-     Log.e("MusicPlayerV11","YouTube playback failed",e)
-     runOnUiThread{
-      val msg=e.message?.take(180)?:"nie udało się pobrać audio"
-      Toast.makeText(this,"YouTube: $msg",Toast.LENGTH_LONG).show()
+    conn.outputStream.use{it.write(jsonBody.toByteArray(Charsets.UTF_8))}
+    val code=conn.responseCode
+    val stream=if(code>=400) conn.errorStream else conn.inputStream
+    val raw=stream?.use{it.bufferedReader().readText()}?:""
+    if(code !in 200..299) throw IllegalStateException("YouTube HTTP $code")
+    val root=org.json.JSONObject(raw)
+    val status=root.optJSONObject("playabilityStatus")?.optString("status","")
+    if(status!="OK") throw IllegalStateException(root.optJSONObject("playabilityStatus")?.optString("reason","Film niedostępny")?:"Film niedostępny")
+    val details=root.optJSONObject("videoDetails")
+    val title=details?.optString("title","YouTube")?:"YouTube"
+    val author=details?.optString("author","YouTube")?:"YouTube"
+    val formats=root.optJSONObject("streamingData")?.optJSONArray("adaptiveFormats")
+     ?:throw IllegalStateException("Brak strumieni audio")
+    var bestUrl:String?=null
+    var bestBitrate=0
+    for(i in 0 until formats.length()){
+     val f=formats.optJSONObject(i)?:continue
+     val mime=f.optString("mimeType","")
+     val url=f.optString("url","")
+     val bitrate=f.optInt("averageBitrate",f.optInt("bitrate",0))
+     if(mime.startsWith("audio/") && url.isNotBlank() && bitrate>=bestBitrate){
+      bestBitrate=bitrate
+      bestUrl=url
      }
     }
+    val streamUrl=bestUrl?:throw IllegalStateException("YouTube nie zwrócił bezpośredniego URL audio")
+    runOnUiThread{
+     controller?.clearMediaItems()
+     controller?.setMediaItem(
+      MediaItem.Builder()
+       .setMediaId("youtube:$id")
+       .setUri(streamUrl)
+       .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist(author).build())
+       .build()
+     )
+     controller?.prepare()
+     controller?.play()
+     now.text="$title — $author • YouTube"
+     Toast.makeText(this,"▶ Odtwarzanie audio",Toast.LENGTH_SHORT).show()
+    }
+   }catch(e:Exception){
+    Log.e("MusicPlayerV12","YouTube direct playback failed",e)
+    runOnUiThread{
+     Toast.makeText(this,"YouTube: "+(e.message?:"nie udało się pobrać audio"),Toast.LENGTH_LONG).show()
+    }
+   }
   }
  }
 
