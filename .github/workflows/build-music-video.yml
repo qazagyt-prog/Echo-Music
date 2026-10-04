@@ -28,4 +28,4 @@ jobs:
       - name: Build FOSS universal debug APK
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleUniversalFossDebug --stacktrace
+          ./gradlew assembleUniversalFossDebug --stacktrace --no-daemon
