@@ -43,7 +43,7 @@ class MainActivity: AppCompatActivity() {
 
  private fun buildUi(){
   val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(20,20,20,10);setBackgroundColor(Color.rgb(8,9,11))}
-  val title=TextView(this).apply{text="MUSIC PLAYER V16";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
+  val title=TextView(this).apply{text="MUSIC PLAYER V17";textSize=28f;setTextColor(Color.WHITE);setPadding(0,0,0,12)}
   search=EditText(this).apply{hint="Szukaj utworu, wykonawcy lub albumu…";setTextColor(Color.WHITE);setHintTextColor(Color.GRAY);setSingleLine(true)}
   now=TextView(this).apply{text="Brak utworu";textSize=17f;setTextColor(Color.WHITE);setPadding(0,18,0,8)}
   val controls=LinearLayout(this).apply{gravity=Gravity.CENTER}
@@ -144,34 +144,33 @@ class MainActivity: AppCompatActivity() {
    Toast.makeText(this,"Nieprawidłowy link YouTube",Toast.LENGTH_LONG).show();return
   }
   val url="https://www.youtube.com/watch?v=$id"
-  Toast.makeText(this,"V16: przygotowuję audio z YouTube…",Toast.LENGTH_SHORT).show()
+  Toast.makeText(this,"V17: przygotowuję audio z YouTube…",Toast.LENGTH_SHORT).show()
   executor.execute{
    try{
     dev.ffmpegkit_maintained.ytdlp.YtDlp.init(applicationContext)
     val dir=java.io.File(cacheDir,"youtube")
     dir.mkdirs()
     dir.listFiles()?.forEach{it.delete()}
-    fun download(format:String, clients:String): java.io.File {
+    fun download(format:String): java.io.File {
      val request=dev.ffmpegkit_maintained.ytdlp.YtDlpRequest(url)
       .setOutputTemplate(java.io.File(dir,"%(id)s_%(ext)s").absolutePath)
       .addOption("--no-playlist")
       .addOption("--no-part")
       .addOption("--no-mtime")
       .addOption("--restrict-filenames")
-      .addOption("--no-warnings")
       .addOption("-f",format)
-      .addOption("--extractor-args","youtube:player_client=$clients")
+      .addOption("--verbose")
      val response=dev.ffmpegkit_maintained.ytdlp.YtDlp.execute(request,null)
      val files=dir.listFiles()?.filter{it.isFile && it.length()>1024}?.sortedByDescending{it.length()}?:emptyList()
      if(response.exitCode!=0 || files.isEmpty()) throw IllegalStateException("yt-dlp nie pobrał audio (kod "+response.exitCode+")")
      return files.first()
     }
     val file=try{
-     download("best[acodec!=none][height<=360]/best[acodec!=none]/best","web_embedded")
+     download("bestaudio/best")
     }catch(first:Exception){
-     Log.w("MusicPlayerV16","Audio-only extraction failed; retrying with compatible A/V format",first)
+     Log.w("MusicPlayerV17","First YouTube extraction failed; retrying with fallback format",first)
      dir.listFiles()?.forEach{it.delete()}
-     download("best[acodec!=none][height<=360]/best[acodec!=none]/best","web_embedded")
+     download("best[acodec!=none]/best")
     }
     val title=file.nameWithoutExtension.replace('_',' ').ifBlank{"YouTube"}
     runOnUiThread{
@@ -189,10 +188,10 @@ class MainActivity: AppCompatActivity() {
      Toast.makeText(this,"▶ YouTube — odtwarzanie",Toast.LENGTH_SHORT).show()
     }
    }catch(e:Exception){
-    Log.e("MusicPlayerV16","yt-dlp failed",e)
+    Log.e("MusicPlayerV17","yt-dlp failed",e)
     runOnUiThread{
      val msg=e.message?.replace("\n"," ")?.take(260)?:"nie udało się pobrać audio"
-     Toast.makeText(this,"YouTube V16: $msg",Toast.LENGTH_LONG).show()
+     Toast.makeText(this,"YouTube V17: $msg",Toast.LENGTH_LONG).show()
     }
    }
   }
